@@ -7,6 +7,9 @@
     <title>Electricity & Fluid Power Analogy</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { font-family: 'Inter', system-ui, sans-serif; }
@@ -295,6 +298,9 @@
         let waterParticles = [];
         let electronParticles = [];
         let clock = new THREE.Clock();
+        let composer, heatDistortionPass;
+        let heatIntensity = 0;
+        let heatWaves = [];
 
         const PIPE_START = -2.5; 
         const PIPE_END = 2.5;    
@@ -307,7 +313,7 @@
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x18181b); 
+            scene.background = new THREE.Color(0x18181b);
             scene.fog = new THREE.Fog(0x18181b, 10, 25);
             camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 1.5, 13);
@@ -336,6 +342,7 @@
             createElectricalSystem();
             createWaterSystem();
             createGridFloor();
+            setupHeatDistortion();
 
             document.querySelectorAll('input[type="range"]').forEach(slider => {
                 slider.addEventListener('input', handleSliderInput);
@@ -508,7 +515,7 @@
             document.getElementById('water-power').textContent = `${state.power.toFixed(1)} W`;
             document.getElementById('water-velocity').textContent = `${velocityMetersPerSecond.toFixed(1)} m/s`;
 
-            updateVisuals(temp);
+            updateVisuals(temp, clock.getElapsedTime());
         }
 
         function createElectricalSystem() {
@@ -549,17 +556,51 @@
                 emissive: 0x000000, emissiveIntensity: 0
             });
             resistorMesh = new THREE.Mesh(coilGeo, coilMat);
+            resistorMesh.userData.baseColor = new THREE.Color(0x71717a);
             group.add(resistorMesh);
 
             resistorGlow = new THREE.PointLight(0xff4400, 0, 5);
             group.add(resistorGlow);
+
+            // Create heat wave sprites for visible heat distortion
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0, 'rgba(255, 150, 50, 0.4)');
+            gradient.addColorStop(0.5, 'rgba(255, 100, 20, 0.2)');
+            gradient.addColorStop(1, 'rgba(255, 80, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 64, 64);
+
+            const heatTexture = new THREE.CanvasTexture(canvas);
+
+            for (let i = 0; i < 4; i++) {
+                const spriteMaterial = new THREE.SpriteMaterial({
+                    map: heatTexture,
+                    transparent: true,
+                    opacity: 0,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.scale.set(0.6, 0.9, 1);
+                sprite.position.set(0, 0, 0);
+                sprite.userData = {
+                    offset: i * 0.3,
+                    baseY: 0
+                };
+                group.add(sprite);
+                heatWaves.push(sprite);
+            }
 
             const electronGeo = new THREE.SphereGeometry(0.04, 8, 8);
             for (let i = 0; i < 40; i++) {
                 const electronMat = new THREE.MeshBasicMaterial({ color: 0xe4e4e7 });
                 const electron = new THREE.Mesh(electronGeo, electronMat);
                 electron.position.x = PIPE_START + Math.random() * (PIPE_END - PIPE_START);
-                electron.userData = { 
+                electron.userData = {
                     offsetY: (Math.random() - 0.5) * 0.15,
                     offsetZ: (Math.random() - 0.5) * 0.15
                 };
@@ -645,7 +686,104 @@
             scene.add(gridHelper);
         }
 
-        function updateVisuals(temp) {
+        function setupHeatDistortion() {
+            // Custom heat distortion shader
+            const HeatDistortionShader = {
+                uniforms: {
+                    tDiffuse: { value: null },
+                    time: { value: 0 },
+                    intensity: { value: 0 },
+                    heatCenterX: { value: -4.5 }, // Resistor X position
+                    heatCenterY: { value: 0.0 }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform sampler2D tDiffuse;
+                    uniform float time;
+                    uniform float intensity;
+                    uniform float heatCenterX;
+                    uniform float heatCenterY;
+                    varying vec2 vUv;
+
+                    // Noise function for organic heat waves
+                    float noise(vec2 p) {
+                        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+                    }
+
+                    float smoothNoise(vec2 p) {
+                        vec2 i = floor(p);
+                        vec2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+
+                        float a = noise(i);
+                        float b = noise(i + vec2(1.0, 0.0));
+                        float c = noise(i + vec2(0.0, 1.0));
+                        float d = noise(i + vec2(1.0, 1.0));
+
+                        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                    }
+
+                    void main() {
+                        vec2 uv = vUv;
+
+                        // Calculate distance from heat source (resistor)
+                        // Adjust for screen space - resistor is at -4.5 in world, map to ~0.32 in screen
+                        vec2 heatCenter = vec2(0.32, 0.5);
+                        float dist = distance(uv, heatCenter);
+
+                        // Heat effect falls off with distance - much tighter falloff
+                        float heatFalloff = 1.0 - smoothstep(0.0, 0.15, dist);
+
+                        // Layered noise for organic heat waves
+                        float n1 = smoothNoise(uv * 8.0 + time * 0.5);
+                        float n2 = smoothNoise(uv * 16.0 - time * 0.3);
+                        float combinedNoise = (n1 * 0.6 + n2 * 0.4);
+
+                        // Rising heat effect - stronger at top
+                        float risingEffect = pow(uv.y, 0.8);
+
+                        // Distortion amount - reduced intensity
+                        vec2 distortion = vec2(
+                            (combinedNoise - 0.5) * 0.008,
+                            (combinedNoise - 0.5) * 0.012 * risingEffect
+                        );
+
+                        distortion *= heatFalloff * intensity;
+
+                        // Sample the texture with distortion
+                        vec2 distortedUV = uv + distortion;
+                        vec4 color = texture2D(tDiffuse, distortedUV);
+
+                        // Optional: Add slight color shift for heat
+                        if (intensity > 0.3) {
+                            float heatColorShift = heatFalloff * intensity * 0.1;
+                            color.r += heatColorShift;
+                            color.b -= heatColorShift * 0.5;
+                        }
+
+                        gl_FragColor = color;
+                    }
+                `
+            };
+
+            // Setup composer
+            composer = new THREE.EffectComposer(renderer);
+
+            const renderPass = new THREE.RenderPass(scene, camera);
+            composer.addPass(renderPass);
+
+            heatDistortionPass = new THREE.ShaderPass(HeatDistortionShader);
+            heatDistortionPass.renderToScreen = true;
+            composer.addPass(heatDistortionPass);
+        }
+
+        function updateVisuals(temp, time) {
             if (temp > 500) {
                 const glowColor = kelvinToRGB(temp);
                 const intensity = Math.min((temp - 500) / 1000, 2.0);
@@ -748,13 +886,92 @@
             const time = clock.getElapsedTime();
             camera.position.x = Math.sin(time * 0.05) * 0.5;
             camera.lookAt(0, 0, 0);
-            renderer.render(scene, camera);
+
+            // === COIL COLOR PULSATION ===
+            // Pulsation frequency and amplitude scale with temperature
+            const ambientTemp = 300;
+            const currentTemp = ambientTemp + (state.power * 0.5);
+
+            // Calculate pulsation amplitude based on temperature
+            // From 0-975K: scale amplitude from 0 to 1.0
+            // Past 975K: maintain 100% amplitude
+            const tempRange = currentTemp - ambientTemp; // Temp above ambient
+            const maxTempForScaling = 675; // 975K total = 675K above ambient (300K)
+            const pulseAmplitude = Math.min(tempRange / maxTempForScaling, 1.0);
+
+            // Calculate pulsation frequency based on temperature
+            // Tri-interpolation with three control points:
+            // 0K: 0.5 Hz
+            // 700K: 2.0 Hz (peak)
+            // 3000K: 0.75 Hz
+            let pulseFrequency;
+            if (currentTemp <= 700) {
+                // Interpolate from 0K (0.5 Hz) to 700K (2.0 Hz)
+                const t = currentTemp / 700;
+                pulseFrequency = 0.5 + (2.0 - 0.5) * t;
+            } else {
+                // Interpolate from 700K (2.0 Hz) to 3000K (0.75 Hz)
+                const t = (currentTemp - 700) / (3000 - 700);
+                pulseFrequency = 2.0 + (0.75 - 2.0) * t;
+            }
+
+            const pulsation = 0.5 + 0.5 * pulseAmplitude * Math.sin(time * Math.PI * 2 * pulseFrequency);
+
+            // Blend between darker (cooling) and lighter/warmer (heating)
+            const coolerColor = new THREE.Color(0x3a3a40); // Dark gray - cooling
+            const warmerColor = new THREE.Color(0x9a8a7e); // Lighter warm tone - heating
+
+            const pulseColor = new THREE.Color();
+            pulseColor.lerpColors(coolerColor, warmerColor, pulsation);
+
+            resistorMesh.material.color.copy(pulseColor);
+
+            // Update heat distortion effect
+            if (heatDistortionPass) {
+                heatDistortionPass.uniforms.time.value = time;
+
+                // Map temperature to distortion intensity (300K = 0, 1500K+ = max)
+                const ambientTemp = 300;
+                const currentTemp = ambientTemp + (state.power * 0.5);
+                const targetIntensity = Math.min(Math.max((currentTemp - 300) / 1200, 0), 1.0);
+
+                // Smooth interpolation for intensity
+                heatIntensity += (targetIntensity - heatIntensity) * 0.05;
+                heatDistortionPass.uniforms.intensity.value = heatIntensity;
+            }
+
+            // Animate heat wave sprites
+            heatWaves.forEach((sprite, i) => {
+                const waveTime = time * 0.5 + sprite.userData.offset;
+                const waveProgress = (waveTime % 2.0) / 2.0; // 0 to 1 cycle every 2 seconds
+
+                // Rising motion - reduced height
+                sprite.position.y = sprite.userData.baseY + waveProgress * 1.2;
+
+                // Fade in at bottom, fade out at top
+                const fadeIn = Math.min(waveProgress * 3, 1);
+                const fadeOut = 1 - Math.max((waveProgress - 0.6) * 2.5, 0);
+                sprite.material.opacity = fadeIn * fadeOut * heatIntensity * 0.5;
+
+                // Scale grows more subtly as it rises
+                const scale = 0.6 + waveProgress * 0.3;
+                sprite.scale.set(scale, scale * 1.2, 1);
+
+                // Subtle wavering motion
+                sprite.position.x = Math.sin(waveTime * 1.5 + i) * 0.08;
+                sprite.position.z = Math.cos(waveTime * 1.2 + i) * 0.08;
+            });
+
+            composer.render();
         }
 
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            if (composer) {
+                composer.setSize(window.innerWidth, window.innerHeight);
+            }
         }
 
         init();
