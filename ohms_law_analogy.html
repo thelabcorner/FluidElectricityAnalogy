@@ -1,0 +1,757 @@
+<!-- Paste January 20, 2026 - 1:42AM -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electricity & Fluid Power Analogy</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', system-ui, sans-serif; }
+        body { margin: 0; overflow: hidden; background: #121214; }
+        
+        .card {
+            background: hsl(240 6% 10%);
+            border: 1px solid hsl(240 5% 20%);
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        
+        .card-header {
+            border-bottom: 1px solid hsl(240 5% 20%);
+        }
+        
+        /* Custom Slider Styling */
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: hsl(240 5% 20%);
+            border-radius: 9999px;
+            height: 6px;
+            width: 100%;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 9999px;
+            background: hsl(0 0% 98%);
+            cursor: pointer;
+            border: 2px solid hsl(240 5% 64.9%);
+            box-shadow: 0 0 10px rgba(255,255,255,0.2);
+            transition: all 0.15s;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: hsl(0 0% 100%);
+            transform: scale(1.1);
+        }
+
+        input[type="range"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        input[type="range"]:disabled::-webkit-slider-thumb {
+            background: hsl(240 5% 40%);
+            border-color: hsl(240 5% 30%);
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .stat-card {
+            background: hsl(240 5% 14%);
+            border: 1px solid hsl(240 5% 20%);
+            border-radius: 0.5rem;
+        }
+        
+        /* Lock Button Styles (Shadcn-ish) */
+        .btn-lock {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.375rem;
+            width: 2rem;
+            height: 2rem;
+            color: hsl(240 5% 60%);
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            cursor: pointer;
+        }
+        .btn-lock:hover {
+            background-color: hsl(240 5% 20%);
+            color: hsl(0 0% 98%);
+        }
+        .btn-lock.locked {
+            background-color: hsl(240 5% 25%);
+            color: #fb923c; /* Orange-400 */
+            border-color: hsl(240 5% 30%);
+        }
+
+        .muted { color: hsl(240 5% 70%); }
+        .text-zinc-50 { color: #fafafa; }
+        .formula { font-family: 'Courier New', monospace; font-size: 0.75rem; color: hsl(240 5% 60%); }
+    </style>
+</head>
+<body class="text-zinc-50">
+    <!-- Header -->
+    <div class="fixed top-0 left-0 right-0 z-10 card border-t-0 rounded-t-none px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div>
+                <h1 class="text-lg font-semibold tracking-tight">Ohm's Law Analogy</h1>
+                <p class="text-sm muted">Fluid Power (Poiseuille's Law)</p>
+            </div>
+            <div class="flex gap-6 text-xs muted">
+                <span>P = V·I</span>
+                <span>P_fluid = ΔP·Q</span>
+                <span>1 W = 1 kPa·L/s</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container" class="w-full h-screen"></div>
+
+    <!-- Side Labels -->
+    <div class="fixed top-24 left-6 z-10">
+        <div class="card px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.6)]"></div>
+                <span class="text-sm font-medium">Electrical Circuit</span>
+            </div>
+            <p class="text-xs muted mt-1">Resistor (Ω)</p>
+        </div>
+    </div>
+    
+    <div class="fixed top-24 right-6 z-10">
+        <div class="card px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]"></div>
+                <span class="text-sm font-medium">Hydraulic System</span>
+            </div>
+            <p class="text-xs muted mt-1">Pipe Construction</p>
+        </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="fixed bottom-0 left-0 right-0 z-10 card border-b-0 rounded-b-none">
+        <div class="max-w-7xl mx-auto p-4 lg:p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- COMPACT CONTROLS -->
+                <div class="card p-4 flex flex-col justify-center">
+                    <div class="card-header -mx-4 -mt-4 px-4 py-2 mb-3">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">System Parameters</h3>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <!-- Voltage Row -->
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1 space-y-1">
+                                <div class="flex justify-between text-xs">
+                                    <span class="muted">Voltage (V) / Pressure (kPa)</span>
+                                    <span id="val-voltage" class="font-mono text-zinc-50">12</span>
+                                </div>
+                                <input type="range" id="slider-voltage" data-param="voltage" min="0" max="240" step="1" value="12">
+                            </div>
+                            <button class="btn-lock locked" data-target="voltage" title="Lock Voltage">
+                                <svg class="icon-unlocked w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                                <svg class="icon-locked w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            </button>
+                        </div>
+
+                        <!-- Resistance Row -->
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1 space-y-1">
+                                <div class="flex justify-between text-xs">
+                                    <span class="muted">Resistance (Ω) / Constriction</span>
+                                    <span id="val-resistance" class="font-mono text-zinc-50">10</span>
+                                </div>
+                                <input type="range" id="slider-resistance" data-param="resistance" min="0.1" max="100" step="0.1" value="10">
+                            </div>
+                            <button class="btn-lock locked" data-target="resistance" title="Lock Resistance">
+                                <svg class="icon-unlocked w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                                <svg class="icon-locked w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            </button>
+                        </div>
+
+                        <!-- Current Row -->
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1 space-y-1">
+                                <div class="flex justify-between text-xs">
+                                    <span class="muted">Current (A) / Flow (L/s)</span>
+                                    <span id="val-current" class="font-mono text-zinc-50">1.20</span>
+                                </div>
+                                <input type="range" id="slider-current" data-param="current" min="0" max="100" step="0.1" value="1.2">
+                            </div>
+                            <button class="btn-lock" data-target="current" title="Lock Current">
+                                <svg class="icon-unlocked w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                                <svg class="icon-locked w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            </button>
+                        </div>
+
+                        <!-- Power Row -->
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1 space-y-1">
+                                <div class="flex justify-between text-xs">
+                                    <span class="muted">Power (W)</span>
+                                    <span id="val-power" class="font-mono text-zinc-50">14.4</span>
+                                </div>
+                                <input type="range" id="slider-power" data-param="power" min="0" max="10000" step="1" value="14.4">
+                            </div>
+                            <button class="btn-lock" data-target="power" title="Lock Power">
+                                <svg class="icon-unlocked w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                                <svg class="icon-locked w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Electrical Readings -->
+                <div class="card p-4">
+                    <div class="card-header -mx-4 -mt-4 px-4 py-3 mb-4 flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-orange-500"></div>
+                        <h3 class="text-sm font-medium">Electrical</h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="stat-card p-3">
+                            <div class="text-xs muted mb-1">Voltage (V)</div>
+                            <div id="elec-voltage" class="text-lg font-mono font-medium">12.0 V</div>
+                        </div>
+                        <div class="stat-card p-3">
+                            <div class="text-xs muted mb-1">Current (I)</div>
+                            <div id="elec-current" class="text-lg font-mono font-medium">1.20 A</div>
+                        </div>
+                        <div class="stat-card p-3">
+                            <div class="text-xs muted mb-1">Resistance (R)</div>
+                            <div id="elec-resistance" class="text-lg font-mono font-medium">10.0 Ω</div>
+                        </div>
+                        <div class="stat-card p-3">
+                            <div class="text-xs muted mb-1">Elec. Power (P)</div>
+                            <div id="elec-power" class="text-lg font-mono font-medium text-orange-400">14.4 W</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card p-2 mt-3 text-center">
+                        <span class="text-xs muted">Heat Dissipation: </span>
+                        <span id="temperature" class="text-sm font-mono">Low</span>
+                    </div>
+                </div>
+
+                <!-- Hydraulic Readings -->
+                <div class="card p-4">
+                    <div class="card-header -mx-4 -mt-4 px-4 py-3 mb-4 flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <h3 class="text-sm font-medium">Hydraulic</h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="stat-card p-3">
+                            <div class="text-xs muted mb-1">Pressure (ΔP)</div>
+                            <div id="water-pressure" class="text-lg font-mono font-medium">12.0 kPa</div>
+                        </div>
+                        <div class="stat-card p-3">
+                            <div class="text-xs muted mb-1">Flow Rate (Q)</div>
+                            <div id="water-flow" class="text-lg font-mono font-medium">1.20 L/s</div>
+                        </div>
+                        <div class="stat-card p-3">
+                            <div class="text-xs muted mb-1">Inner Diameter</div>
+                            <div id="pipe-diameter" class="text-lg font-mono font-medium">20.0 mm</div>
+                        </div>
+                        <div class="stat-card p-3">
+                            <div class="text-xs muted mb-1">Fluid Power (P)</div>
+                            <div id="water-power" class="text-lg font-mono font-medium text-blue-400">14.4 W</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card p-2 mt-3 text-center">
+                        <span class="text-xs muted">Fluid Velocity: </span>
+                        <span id="water-velocity" class="text-sm font-mono">3.8 m/s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === STATE MANAGEMENT ===
+        const state = {
+            voltage: 12,
+            resistance: 10,
+            current: 1.2,
+            power: 14.4
+        };
+
+        const locks = new Set(['voltage', 'resistance']);
+        let lastTouchedParam = 'voltage'; 
+
+        // === THREE.JS SETUP ===
+        let scene, camera, renderer;
+        let resistorMesh, resistorGlow;
+        let pipeGroup;
+        let waterParticles = [];
+        let electronParticles = [];
+        let clock = new THREE.Clock();
+
+        const PIPE_START = -2.5; 
+        const PIPE_END = 2.5;    
+        const REF_RESISTANCE = 10;
+        const REF_DIAMETER_METERS = 0.02; 
+        const VISUAL_SCALE = 0.4 / 0.02; 
+
+        // Cap Visual Velocity to prevent tunneling/explosion
+        const MAX_VISUAL_SPEED = 12.0;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x18181b); 
+            scene.fog = new THREE.Fog(0x18181b, 10, 25);
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.5, 13);
+            camera.lookAt(0, 0, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0x404050, 0.8));
+            const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            keyLight.position.set(5, 8, 5);
+            scene.add(keyLight);
+            scene.add(new THREE.DirectionalLight(0x8888ff, 0.5).position.set(-5, 0, -5));
+            scene.add(new THREE.DirectionalLight(0xffaa88, 0.4).position.set(0, 2, -5));
+
+            createElectricalSystem();
+            createWaterSystem();
+            createGridFloor();
+
+            document.querySelectorAll('input[type="range"]').forEach(slider => {
+                slider.addEventListener('input', handleSliderInput);
+            });
+
+            document.querySelectorAll('.btn-lock').forEach(btn => {
+                btn.addEventListener('click', handleLockToggle);
+            });
+
+            window.addEventListener('resize', onWindowResize);
+
+            updateUI();
+            animate();
+        }
+
+        // === SOLVER LOGIC ===
+
+        function handleLockToggle(e) {
+            const btn = e.currentTarget;
+            const param = btn.dataset.target;
+
+            if (locks.has(param)) {
+                locks.delete(param);
+            } else {
+                if (locks.size >= 2) {
+                    const it = locks.values();
+                    locks.delete(it.next().value);
+                }
+                locks.add(param);
+            }
+            solveSystem();
+            updateUI();
+        }
+
+        function handleSliderInput(e) {
+            const param = e.target.dataset.param;
+            let value = parseFloat(e.target.value);
+            
+            // Input Sanitation
+            if (param === 'resistance') value = Math.max(0.1, value); // Strict min constraint
+            if (param === 'voltage') value = Math.max(0, value);
+            
+            state[param] = value;
+            lastTouchedParam = param;
+            
+            solveSystem();
+            updateUI();
+        }
+
+        function solveSystem() {
+            const drivers = [];
+            locks.forEach(p => drivers.push(p));
+            
+            if (drivers.length < 2) {
+                if (!drivers.includes(lastTouchedParam)) drivers.push(lastTouchedParam);
+            }
+            if (drivers.length < 2) {
+                if (!drivers.includes('voltage')) drivers.push('voltage');
+            }
+            if (drivers.length < 2) {
+                if (!drivers.includes('resistance')) drivers.push('resistance');
+            }
+
+            const p1 = drivers[0];
+            const p2 = drivers[1];
+            calculateFromDrivers(p1, p2);
+        }
+
+        function calculateFromDrivers(p1, p2) {
+            const keys = [p1, p2].sort();
+            const pair = keys.join('-');
+
+            // Helper for calculation safety
+            const safeDiv = (num, den) => den > 0.0001 ? num / den : 0;
+
+            if (pair === 'resistance-voltage') { 
+                state.current = safeDiv(state.voltage, state.resistance);
+                state.power = state.voltage * state.current;
+            } 
+            else if (pair === 'current-voltage') { 
+                state.resistance = safeDiv(state.voltage, state.current);
+                state.power = state.voltage * state.current;
+            }
+            else if (pair === 'power-voltage') { 
+                state.current = safeDiv(state.power, state.voltage);
+                state.resistance = safeDiv(state.voltage, state.current);
+            }
+            else if (pair === 'current-resistance') { 
+                state.voltage = state.current * state.resistance;
+                state.power = state.current * state.current * state.resistance;
+            }
+            else if (pair === 'power-resistance') { 
+                state.current = Math.sqrt(safeDiv(state.power, state.resistance));
+                state.voltage = state.current * state.resistance;
+            }
+            else if (pair === 'current-power') { 
+                state.voltage = safeDiv(state.power, state.current);
+                state.resistance = safeDiv(state.voltage, state.current);
+            }
+
+            // FINAL CLAMPS
+            state.voltage = Math.max(0, state.voltage);
+            state.resistance = Math.max(0.1, state.resistance); // Min 0.1 Ohm
+            state.current = Math.max(0, state.current);
+            state.power = Math.max(0, state.power);
+        }
+
+        function updateUI() {
+            ['voltage', 'resistance', 'current', 'power'].forEach(key => {
+                const slider = document.getElementById(`slider-${key}`);
+                const display = document.getElementById(`val-${key}`);
+                const lockBtn = document.querySelector(`.btn-lock[data-target="${key}"]`);
+                
+                let displayVal = state[key];
+                if (key === 'voltage') displayVal = displayVal.toFixed(0);
+                else if (key === 'power') displayVal = displayVal.toFixed(1);
+                else displayVal = displayVal.toFixed(2);
+                
+                if (key === 'resistance') displayVal = state[key].toFixed(1);
+
+                display.textContent = displayVal;
+
+                if (document.activeElement !== slider) {
+                    slider.value = state[key];
+                }
+
+                const isLocked = locks.has(key);
+                const isSystemLocked = locks.size >= 2;
+                const iconUnlocked = lockBtn.querySelector('.icon-unlocked');
+                const iconLocked = lockBtn.querySelector('.icon-locked');
+                
+                if (isLocked) {
+                    lockBtn.classList.add('locked');
+                    iconUnlocked.classList.add('hidden');
+                    iconLocked.classList.remove('hidden');
+                } else {
+                    lockBtn.classList.remove('locked');
+                    iconUnlocked.classList.remove('hidden');
+                    iconLocked.classList.add('hidden');
+                }
+
+                if (isSystemLocked && !isLocked) slider.disabled = true;
+                else slider.disabled = false;
+            });
+
+            document.getElementById('elec-voltage').textContent = `${state.voltage.toFixed(1)} V`;
+            document.getElementById('elec-current').textContent = `${state.current.toFixed(2)} A`;
+            document.getElementById('elec-resistance').textContent = `${state.resistance.toFixed(1)} Ω`;
+            document.getElementById('elec-power').textContent = `${state.power.toFixed(1)} W`;
+
+            const ambientTemp = 300;
+            const temp = ambientTemp + (state.power * 0.5); // Reduced thermal constant
+            let tempText = "Cool";
+            if(temp > 350) tempText = "Warm";
+            if(temp > 500) tempText = "Hot";
+            if(temp > 1000) tempText = "Critical";
+            document.getElementById('temperature').textContent = `${temp.toFixed(0)} K (${tempText})`;
+
+            updatePipeGeometry();
+            const realRadiusMeters = pipeGroup.userData.realRadiusMeters;
+            const realDiameterMM = realRadiusMeters * 2 * 1000;
+            const realAreaMeters2 = Math.PI * realRadiusMeters * realRadiusMeters;
+            
+            const flowRateCubicMeters = state.current * 0.001; 
+            const velocityMetersPerSecond = (realAreaMeters2 > 0) ? flowRateCubicMeters / realAreaMeters2 : 0;
+            
+            document.getElementById('water-pressure').textContent = `${state.voltage.toFixed(1)} kPa`;
+            document.getElementById('water-flow').textContent = `${state.current.toFixed(2)} L/s`;
+            document.getElementById('pipe-diameter').textContent = `${realDiameterMM.toFixed(1)} mm`;
+            document.getElementById('water-power').textContent = `${state.power.toFixed(1)} W`;
+            document.getElementById('water-velocity').textContent = `${velocityMetersPerSecond.toFixed(1)} m/s`;
+
+            updateVisuals(temp);
+        }
+
+        function createElectricalSystem() {
+            const xOffset = -4.5;
+            const group = new THREE.Group();
+            group.position.x = xOffset;
+            scene.add(group);
+
+            const bracketGeo = new THREE.BoxGeometry(0.3, 1.2, 0.3);
+            const bracketMat = new THREE.MeshStandardMaterial({ color: 0x52525b, metalness: 0.8, roughness: 0.3 });
+            const bracketLeft = new THREE.Mesh(bracketGeo, bracketMat);
+            bracketLeft.position.set(-2, 0, 0);
+            group.add(bracketLeft);
+            const bracketRight = new THREE.Mesh(bracketGeo, bracketMat);
+            bracketRight.position.set(2, 0, 0);
+            group.add(bracketRight);
+
+            const wireGeo = new THREE.CylinderGeometry(0.06, 0.06, 4.0, 16);
+            const wireMat = new THREE.MeshStandardMaterial({ color: 0xa1a1aa, metalness: 0.9, roughness: 0.2 });
+            const wire = new THREE.Mesh(wireGeo, wireMat);
+            wire.rotation.z = Math.PI / 2;
+            group.add(wire);
+
+            const coilPoints = [];
+            const coilTurns = 12;
+            for (let i = 0; i <= coilTurns * 24; i++) {
+                const t = i / (coilTurns * 24);
+                const angle = t * coilTurns * Math.PI * 2;
+                const x = (t - 0.5) * 2.2;
+                const y = Math.sin(angle) * 0.3;
+                const z = Math.cos(angle) * 0.3;
+                coilPoints.push(new THREE.Vector3(x, y, z));
+            }
+            const coilCurve = new THREE.CatmullRomCurve3(coilPoints);
+            const coilGeo = new THREE.TubeGeometry(coilCurve, 120, 0.05, 10, false);
+            const coilMat = new THREE.MeshStandardMaterial({
+                color: 0x71717a, metalness: 0.6, roughness: 0.5,
+                emissive: 0x000000, emissiveIntensity: 0
+            });
+            resistorMesh = new THREE.Mesh(coilGeo, coilMat);
+            group.add(resistorMesh);
+
+            resistorGlow = new THREE.PointLight(0xff4400, 0, 5);
+            group.add(resistorGlow);
+
+            const electronGeo = new THREE.SphereGeometry(0.04, 8, 8);
+            for (let i = 0; i < 40; i++) {
+                const electronMat = new THREE.MeshBasicMaterial({ color: 0xe4e4e7 });
+                const electron = new THREE.Mesh(electronGeo, electronMat);
+                electron.position.x = PIPE_START + Math.random() * (PIPE_END - PIPE_START);
+                electron.userData = { 
+                    offsetY: (Math.random() - 0.5) * 0.15,
+                    offsetZ: (Math.random() - 0.5) * 0.15
+                };
+                group.add(electron);
+                electronParticles.push(electron);
+            }
+        }
+
+        function createWaterSystem() {
+            const xOffset = 4.5;
+            pipeGroup = new THREE.Group();
+            pipeGroup.position.set(xOffset, 0, 0);
+            scene.add(pipeGroup);
+            updatePipeGeometry();
+
+            const waterGeo = new THREE.SphereGeometry(0.06, 12, 12);
+            for (let i = 0; i < 150; i++) { 
+                const waterMat = new THREE.MeshPhysicalMaterial({
+                    color: 0x60a5fa, transparent: true, opacity: 0.8,
+                    metalness: 0.1, roughness: 0.1, transmission: 0.1, clearcoat: 1.0
+                });
+                const water = new THREE.Mesh(waterGeo, waterMat);
+                const startX = PIPE_START + Math.random() * (PIPE_END - PIPE_START);
+                water.position.set(startX, 0, 0);
+                water.userData = {
+                    radialPercent: Math.sqrt(Math.random()), 
+                    angle: Math.random() * Math.PI * 2,
+                    speedVar: 0.95 + Math.random() * 0.1
+                };
+                pipeGroup.add(water);
+                waterParticles.push(water);
+            }
+        }
+
+        function updatePipeGeometry() {
+            const safeR = Math.max(0.1, state.resistance);
+            // Real physics diameter calculation
+            const realRadiusMeters = (REF_DIAMETER_METERS / 2) * Math.pow(REF_RESISTANCE / safeR, 0.25);
+            const visualRadius = realRadiusMeters * VISUAL_SCALE;
+            
+            pipeGroup.userData.currentRadius = visualRadius;
+            pipeGroup.userData.realRadiusMeters = realRadiusMeters;
+
+            pipeGroup.children = pipeGroup.children.filter(child => {
+                if (child.userData.isPipe) {
+                    child.geometry.dispose();
+                    child.material.dispose();
+                    return false;
+                }
+                return true;
+            });
+
+            const pipeMat = new THREE.MeshPhysicalMaterial({
+                color: 0x3b82f6, transparent: true, opacity: 0.15,
+                metalness: 0.1, roughness: 0.1, side: THREE.DoubleSide, depthWrite: false
+            });
+
+            const pipeGeo = new THREE.CylinderGeometry(visualRadius, visualRadius, PIPE_END - PIPE_START, 32, 1, true);
+            const pipeMesh = new THREE.Mesh(pipeGeo, pipeMat);
+            pipeMesh.rotation.z = Math.PI / 2;
+            pipeMesh.userData.isPipe = true;
+            pipeGroup.add(pipeMesh);
+
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0x52525b, metalness: 0.8, roughness: 0.3 });
+            const ringGeo = new THREE.TorusGeometry(visualRadius, 0.05, 16, 32);
+            
+            const ringLeft = new THREE.Mesh(ringGeo, ringMat);
+            ringLeft.position.set(PIPE_START, 0, 0);
+            ringLeft.rotation.y = Math.PI / 2;
+            ringLeft.userData.isPipe = true;
+            pipeGroup.add(ringLeft);
+
+            const ringRight = new THREE.Mesh(ringGeo.clone(), ringMat);
+            ringRight.position.set(PIPE_END, 0, 0);
+            ringRight.rotation.y = Math.PI / 2;
+            ringRight.userData.isPipe = true;
+            pipeGroup.add(ringRight);
+        }
+
+        function createGridFloor() {
+            const gridHelper = new THREE.GridHelper(20, 20, 0x3f3f46, 0x27272a);
+            gridHelper.position.y = -2;
+            scene.add(gridHelper);
+        }
+
+        function updateVisuals(temp) {
+            if (temp > 500) {
+                const glowColor = kelvinToRGB(temp);
+                const intensity = Math.min((temp - 500) / 1000, 2.0);
+                resistorMesh.material.emissive.setRGB(glowColor.r, glowColor.g * 0.6, glowColor.b * 0.2);
+                resistorMesh.material.emissiveIntensity = intensity;
+                resistorGlow.color.setRGB(glowColor.r, glowColor.g, glowColor.b);
+                resistorGlow.intensity = intensity;
+            } else {
+                resistorMesh.material.emissive.setRGB(0, 0, 0);
+                resistorMesh.material.emissiveIntensity = 0;
+                resistorGlow.intensity = 0;
+            }
+        }
+
+        function kelvinToRGB(kelvin) {
+            let r, g, b;
+            const temp = kelvin / 100;
+            if (temp <= 66) {
+                r = 255;
+                g = 99.4708025861 * Math.log(temp) - 161.1195681661;
+            } else {
+                r = 329.698727446 * Math.pow(temp - 60, -0.1332047592);
+                g = 288.1221695283 * Math.pow(temp - 60, -0.0755148492);
+            }
+            if (temp >= 66) b = 255;
+            else if (temp <= 19) b = 0;
+            else b = 138.5177312231 * Math.log(temp - 10) - 305.0447927307;
+            
+            return { 
+                r: Math.max(0, Math.min(255, r)) / 255, 
+                g: Math.max(0, Math.min(255, g)) / 255, 
+                b: Math.max(0, Math.min(255, b)) / 255 
+            };
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            let delta = clock.getDelta();
+            if (delta > 0.1) delta = 0.1; // Cap delta for frame drops
+
+            // === ELECTRONS ===
+            // Cap electron speed for visuals
+            const electronSpeed = Math.min(state.current * 0.5, 8.0);
+            
+            electronParticles.forEach((electron) => {
+                electron.position.x += electronSpeed * delta;
+                if (electron.position.x > PIPE_END) {
+                    electron.position.x = PIPE_START + (electron.position.x - PIPE_END);
+                }
+                const jiggle = 0.005 + Math.min(state.current * 0.002, 0.1);
+                electron.position.y = electron.userData.offsetY + (Math.random() - 0.5) * jiggle;
+                electron.position.z = electron.userData.offsetZ + (Math.random() - 0.5) * jiggle;
+                
+                const brightness = 0.5 + Math.min(state.current * 0.1, 0.5);
+                electron.material.color.setRGB(brightness, brightness, brightness);
+            });
+
+            // === WATER ===
+            const realRadius = pipeGroup.userData.realRadiusMeters;
+            const visualRadius = pipeGroup.userData.currentRadius;
+            const flowQ = state.current * 0.001;
+            const area = Math.PI * realRadius * realRadius;
+            
+            let realVelocity = 0;
+            if (area > 0.00000001) realVelocity = flowQ / area;
+            
+            // Visual Velocity Calculation
+            // Time dilation 0.2 helps visualize high speed
+            let visualVelocity = realVelocity * VISUAL_SCALE * 0.2; 
+            
+            // --- FIX FOR "FLYING OUT" ---
+            // 1. Cap velocity to prevent tunneling
+            if (visualVelocity > MAX_VISUAL_SPEED) visualVelocity = MAX_VISUAL_SPEED;
+            if (isNaN(visualVelocity)) visualVelocity = 0;
+
+            waterParticles.forEach((water) => {
+                // Move
+                water.position.x += visualVelocity * delta * water.userData.speedVar;
+
+                // Wrap
+                if (water.position.x > PIPE_END) {
+                    const overflow = water.position.x - PIPE_END;
+                    water.position.x = PIPE_START + overflow;
+                }
+
+                // --- STRICT RADIAL CONTAINMENT ---
+                // Force particle to stay inside current pipe diameter
+                // If resistance changes (pipe shrinks), particle MUST snap in.
+                // 0.8 multiplier keeps it slightly away from walls
+                const r = visualRadius * 0.8 * water.userData.radialPercent;
+                
+                water.position.y = Math.sin(water.userData.angle) * r;
+                water.position.z = Math.cos(water.userData.angle) * r;
+
+                // Stretch logic (clamped)
+                const stretch = Math.min(1 + visualVelocity * 0.15, 3.5);
+                water.scale.set(stretch, 1/Math.sqrt(stretch), 1/Math.sqrt(stretch));
+            });
+
+            const time = clock.getElapsedTime();
+            camera.position.x = Math.sin(time * 0.05) * 0.5;
+            camera.lookAt(0, 0, 0);
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
+</body>
+</html>
